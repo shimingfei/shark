@@ -27,6 +27,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import shark.memstore2._
 import tachyon.client.{ReadType, TachyonByteBuffer}
 import tachyon.client.table.RawTable
+import tachyon.TachyonURI
 import org.apache.spark.rdd.RDD
 import shark.LogHelper
 
@@ -47,7 +48,7 @@ class TachyonTableRDD(path: String, columnsUsed: JBitSet, @transient sc: SparkCo
   @transient lazy val tfs = OffHeapStorageClient.client.asInstanceOf[TachyonStorageClient].tfs
 
   override def getPartitions: Array[Partition] = {
-    val rawTable: RawTable = tfs.getRawTable(path)
+    val rawTable: RawTable = tfs.getRawTable(new TachyonURI(path))
     // Use the first column to get preferred locations for all partitions.
     val rawColumn = rawTable.getRawColumn(0)
     val numPartitions: Int = rawColumn.partitions()
@@ -58,7 +59,7 @@ class TachyonTableRDD(path: String, columnsUsed: JBitSet, @transient sc: SparkCo
   }
 
   override def compute(theSplit: Partition, context: TaskContext): Iterator[TablePartition] = {
-    val rawTable: RawTable = tfs.getRawTable(path)
+    val rawTable: RawTable = tfs.getRawTable(new TachyonURI(path))
     val activeBuffers = new ArrayBuffer[TachyonByteBuffer]()
     val buffers = Array.tabulate[ByteBuffer](rawTable.getColumns()) { columnIndex =>
       if (columnIndex != 0 && columnsUsed != null && !columnsUsed.get(columnIndex - 1)) {
@@ -66,10 +67,10 @@ class TachyonTableRDD(path: String, columnsUsed: JBitSet, @transient sc: SparkCo
       } else {
         val fp = rawTable.getRawColumn(columnIndex).getPartition(theSplit.index, true)
         // Try to read data from Tachyon's memory, either local or remote.
-        var buf = fp.readByteBuffer()
+        var buf = fp.readByteBuffer(0)
         if (buf == null && fp.recache()) {
           // The data is not in Tachyon's memory yet, recache succeed.
-          buf = fp.readByteBuffer()
+          buf = fp.readByteBuffer(0)
         }
         if (buf == null) {
           logWarning("Table " + path + " column " + columnIndex + " partition " + theSplit.index
@@ -82,7 +83,7 @@ class TachyonTableRDD(path: String, columnsUsed: JBitSet, @transient sc: SparkCo
           data
         } else {
           activeBuffers += buf
-          buf.DATA
+          buf.mData
         }
       }
     }

@@ -24,6 +24,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import tachyon.client.TachyonFS
+import tachyon.TachyonURI
 
 import shark.{LogHelper, SharkEnv}
 import shark.execution.TableReader.PruningFunctionType
@@ -83,7 +84,7 @@ class TachyonStorageClient(val master: String, val warehousePath: String)
     val filePath = parentDirectoryLower + "/" + INSERT_FILE_PREFIX
     // Make sure there aren't file conflicts. This could occur if the directory was created in a
     // previous Shark session.
-    while (tfs.exist(filePath + nextInsertNum)) {
+    while (tfs.exist(new TachyonURI(filePath + nextInsertNum))) {
       nextInsertNum = nextInsertNum + 1
     }
     _fileNameMappings.put(parentDirectoryLower, nextInsertNum)
@@ -99,11 +100,12 @@ class TachyonStorageClient(val master: String, val warehousePath: String)
   }
 
   override def tableExists(tableKey: String): Boolean = {
-    tfs.exist(getTablePath(tableKey))
+    tfs.exist(new TachyonURI(getTablePath(tableKey)))
   }
 
   override def tablePartitionExists(tableKey: String, hivePartitionKey: Option[String]): Boolean = {
-    tfs.exist(getPartitionPath(tableKey, hivePartitionKey.getOrElse(DEFAULT_PARTITION)))
+    tfs.exist(new TachyonURI(getPartitionPath(tableKey, hivePartitionKey
+        .getOrElse(DEFAULT_PARTITION))))
   }
 
   override def dropTable(tableKey: String): Boolean = {
@@ -138,14 +140,14 @@ class TachyonStorageClient(val master: String, val warehousePath: String)
 
       // Create a TachyonTableRDD for each raw tableRDDsAndStats file in the directory.
       val tableDirectory = getPartitionPath(tableKey, hivePartitionKey.getOrElse(DEFAULT_PARTITION))
-      val files = tfs.ls(tableDirectory, false /* recursive */)
+      val files = tfs.listStatus(new TachyonURI(tableDirectory))
       // The first path is just "{tableDirectory}/", so ignore it.
       val rawTableFiles = files.subList(1, files.size)
-      val prunedRDDs = rawTableFiles.map { filePath =>
-        val serializedMetadata = tfs.getRawTable(tfs.getFileId(filePath)).getMetadata
+      val prunedRDDs = rawTableFiles.map { fileInfo =>
+        val serializedMetadata = tfs.getRawTable(fileInfo.getId).getMetadata
         val indexToStats = JavaSerializer.deserialize[collection.Map[Int, TablePartitionStats]](
           serializedMetadata.array())
-       pruningFn(new TachyonTableRDD(filePath, columnsUsed, SharkEnv.sc), indexToStats)
+       pruningFn(new TachyonTableRDD(fileInfo.getPath, columnsUsed, SharkEnv.sc), indexToStats)
       }
       new UnionRDD(SharkEnv.sc, prunedRDDs.toSeq.asInstanceOf[Seq[RDD[Any]]])
     } catch {
@@ -159,8 +161,8 @@ class TachyonStorageClient(val master: String, val warehousePath: String)
       tableKey: String,
       hivePartitionKey: Option[String],
       numColumns: Int): TachyonOffHeapTableWriter = {
-    if (!tfs.exist(warehousePath)) {
-      tfs.mkdir(warehousePath)
+    if (!tfs.exist(new TachyonURI(warehousePath))) {
+      tfs.mkdir(new TachyonURI(warehousePath))
     }
     val parentDirectory = getPartitionPath(tableKey, hivePartitionKey.getOrElse(DEFAULT_PARTITION))
     val filePath = getUniqueFilePath(parentDirectory)
@@ -171,8 +173,8 @@ class TachyonStorageClient(val master: String, val warehousePath: String)
       tableKey: String,
       hivePartitionKeyOpt: Option[String]): Boolean = {
     hivePartitionKeyOpt match {
-      case Some(key) => tfs.mkdir(getPartitionPath(tableKey, key))
-      case None => tfs.mkdir(getPartitionPath(tableKey, DEFAULT_PARTITION))
+      case Some(key) => tfs.mkdir(new TachyonURI(getPartitionPath(tableKey, key)))
+      case None => tfs.mkdir(new TachyonURI(getPartitionPath(tableKey, DEFAULT_PARTITION)))
     }
   }
 
@@ -181,6 +183,6 @@ class TachyonStorageClient(val master: String, val warehousePath: String)
       newTableKey: String): Boolean = {
     val oldPath = getTablePath(oldTableKey)
     val newPath = getTablePath(newTableKey)
-    tfs.rename(oldPath, newPath)
+    tfs.rename(new TachyonURI(oldPath), new TachyonURI(newPath))
   }
 }

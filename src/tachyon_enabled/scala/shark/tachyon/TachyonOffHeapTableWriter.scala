@@ -28,6 +28,7 @@ import shark.memstore2.{OffHeapStorageClient, OffHeapTableWriter, TablePartition
 import tachyon.client.WriteType
 import tachyon.master.MasterInfo
 import tachyon.util.CommonUtils
+import tachyon.TachyonURI
 
 class TachyonOffHeapTableWriter(@transient path: String, @transient numColumns: Int)
   extends OffHeapTableWriter with LogHelper {
@@ -39,7 +40,7 @@ class TachyonOffHeapTableWriter(@transient path: String, @transient numColumns: 
 
   override def createTable() {
     val metadata = ByteBuffer.allocate(0)
-    rawTableId = tfs.createRawTable(path, numColumns, metadata)
+    rawTableId = tfs.createRawTable(new TachyonURI(path), numColumns, metadata)
   }
 
   override def setStats(indexToStats: collection.Map[Int, TablePartitionStats]) {
@@ -67,13 +68,13 @@ class TachyonOffHeapTableWriter(@transient path: String, @transient numColumns: 
     (0 until numColumns).reverse.foreach { column =>
       val srcPath = CommonUtils.concat(tmpPath, tempDir, column + "", part + "")
       val destPath = CommonUtils.concat(rawTable.getPath(), MasterInfo.COL, column + "", part + "")
-      tfs.rename(srcPath, destPath)
+      tfs.rename(-1, new TachyonURI(srcPath), new TachyonURI(destPath))
     }
     tfs.delete(CommonUtils.concat(tmpPath, tempDir), true)
   }
 
   override def cleanTmpPath() {
     val tmpPath = CommonUtils.concat(rawTable.getPath(), TEMP)
-    tfs.delete(tmpPath, true)
+    tfs.delete(new TachyonURI(tmpPath), true)
   }
 }

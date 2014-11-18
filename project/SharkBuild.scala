@@ -29,13 +29,13 @@ import sbtassembly.Plugin.AssemblyKeys._
 object SharkBuild extends Build {
 
   // Shark version
-  val SHARK_VERSION = "0.9.2"
+  val SHARK_VERSION = "0.9.3"
 
   val SHARK_ORGANIZATION = "edu.berkeley.cs.shark"
 
   val HIVE_VERSION = "0.11.0-shark-0.9.1"
 
-  val SPARK_VERSION = "0.9.1"
+  val SPARK_VERSION = "0.9.2"
 
   val SCALA_VERSION = "2.10.3"
 
@@ -56,7 +56,7 @@ object SharkBuild extends Build {
 
   // Whether to build Shark with Tachyon jar.
   val TACHYON_ENABLED = true
-  val TACHYON_VERSION = "0.5.0"
+  val TACHYON_VERSION = "0.6.0-SNAPSHOT"
 
   lazy val root = Project(
     id = "root",
